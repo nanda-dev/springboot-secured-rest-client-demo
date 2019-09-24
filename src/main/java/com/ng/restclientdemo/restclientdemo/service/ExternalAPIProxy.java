@@ -6,46 +6,40 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
-import org.springframework.web.util.UriComponentsBuilder;
 
-import com.ng.restclientdemo.restclientdemo.dto.AccessTokenResponse;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @Service
 public class ExternalAPIProxy implements ExternalAPI {
 	@Autowired private RestTemplate basicRestTemplate;
+	@Autowired private AccessTokenGenerator accessTokenGenerator;
 	
-	public String getUser() {
+	@Override
+	public String getUser(String user) throws Exception {
 		String url = "http://localhost:8080/api/user";
-		
+		String accessToken = accessTokenGenerator.getCurrentAccessTokenForUser(user).getAccessToken();
 		HttpHeaders headers = new HttpHeaders();
-		headers.add("X-MYHEADER", "007");
-		headers.add("Authentication", "Bearer ");
+		headers.add("X-MYHEADER", user);
+		headers.add("Authorization", "Bearer " + accessToken);
 		HttpEntity entity = new HttpEntity(headers);
 		
 		return this.basicRestTemplate.exchange(url, HttpMethod.GET, entity, String.class).getBody();
 	}
 	
-	
-	public AccessTokenResponse getNewAccessToken(String username, String password) {
-		String url = "http://localhost:8080/oauth/token";
-		UriComponentsBuilder builder = UriComponentsBuilder.fromUriString(url)
-                .queryParam("client_id", "client")
-                .queryParam("client_secret", "secret")
-                .queryParam("username", username)
-                .queryParam("password", password)
-                .queryParam("grant_type", "password");
-		return this.basicRestTemplate.exchange(builder.toUriString(), HttpMethod.GET, null, AccessTokenResponse.class).getBody();
+	@Override
+	public String createUser(String username, String password) throws Exception {
+		String url = "http://localhost:8080/api/user";
+		accessTokenGenerator.setAccessTokenForUser(username, password);
+		log.info("new user - access token saved");
+		String accessToken = accessTokenGenerator.getCurrentAccessTokenForUser(username).getAccessToken();
+		log.info("new user - access token fetched: {}", accessToken);
+		HttpHeaders headers = new HttpHeaders();
+		headers.add("X-MYHEADER", username);
+		headers.add("Authorization", "Bearer " + accessToken);
+		HttpEntity entity = new HttpEntity(headers);
+		
+		return this.basicRestTemplate.exchange(url, HttpMethod.GET, entity, String.class).getBody();
 	}
-	
-	public AccessTokenResponse getAccessTokenFromRefreshToken(String refreshToken) {
-		String url = "http://localhost:8080/oauth/token";
-		UriComponentsBuilder builder = UriComponentsBuilder.fromUriString(url)
-                .queryParam("client_id", "client")
-                .queryParam("client_secret", "secret")
-                .queryParam("refresh_token", refreshToken)
-                .queryParam("grant_type", "refresh_token");
-		return this.basicRestTemplate.exchange(builder.toUriString(), HttpMethod.GET, null, AccessTokenResponse.class).getBody();
-	}
-	
 
 }

@@ -2,17 +2,25 @@ package com.ng.restclientdemo.restclientdemo.config;
 
 import java.io.IOException;
 import java.nio.charset.Charset;
+import java.util.List;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpRequest;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.client.ClientHttpRequestExecution;
 import org.springframework.http.client.ClientHttpRequestInterceptor;
 import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.util.StreamUtils;
 
+import com.ng.restclientdemo.restclientdemo.dto.TokenPojo;
+import com.ng.restclientdemo.restclientdemo.service.AccessTokenGenerator;
+
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class RequestResponseLoggingInterceptor implements ClientHttpRequestInterceptor {
+	@Autowired private AccessTokenGenerator accessTokenGenerator;
  
     //private final Logger log = LoggerFactory.getLogger(this.getClass());
  
@@ -20,6 +28,30 @@ public class RequestResponseLoggingInterceptor implements ClientHttpRequestInter
     public ClientHttpResponse intercept(HttpRequest request, byte[] body, ClientHttpRequestExecution execution) throws IOException {
         logRequest(request, body);
         ClientHttpResponse response = execution.execute(request, body);
+        if(response.getStatusCode() == HttpStatus.UNAUTHORIZED) {
+        	log.info("REQ-INTERCEPTOR::UNAUTHORIZED");
+        	HttpHeaders headers = request.getHeaders();
+        	List<String> headerVals = headers.remove("X-MYHEADER");
+        	if(headerVals != null && !headerVals.isEmpty()) {
+        		String username = headerVals.get(0);
+        		try {
+        			//TODO: Fix accessTokenGenerator == null
+        			log.info("{}, {}", (accessTokenGenerator == null), 
+        					"test");
+					String currentRefreshToken = accessTokenGenerator.getCurrentAccessTokenForUser(username).getRefreshToken();
+					TokenPojo newTokens = accessTokenGenerator.getAccessTokenFromRefreshTokenForUser(username, currentRefreshToken);
+					headers.remove("Authorization");
+					headers.add("Authorization", "Bearer " + newTokens.getAccessToken());
+					response = execution.execute(request, body);
+				} catch (Exception e) {
+					log.error("REQ-INTERCEPTOR::ERROR WHILE FETCHING ACCESSTOKENS");
+					e.printStackTrace();
+				}
+        	} else {
+        		//throw error?
+        		log.error("REQ-INTERCEPTOR::CANNOT FIND USERNAME IN HEADER");
+        	}
+        }
         logResponse(response);
         return response;
     }
